@@ -7,11 +7,24 @@
 	  font: 10px sans-serif;
 	}
 
+	svg {
+		overflow: visible;
+	}
+
 	.axis path,
 	.axis line {
 	  fill: none;
 	  stroke: #000;
 	  shape-rendering: crispEdges;
+	}
+
+	.deaths:hover {
+		fill: brown !important;
+	}
+
+	.legend {
+		position: relative;
+		left: 30px;
 	}
 
 	.bar {
@@ -32,31 +45,34 @@
     width = 960 - margin.left - margin.right,
     height = 500 - margin.top - margin.bottom;
 
+// CREATE MAX WIDTH OF CHART
 var x = d3.scale.ordinal()
     .rangeRoundBands([0, width], .1);
 
+// CREATE MAX HEIGHT OF CHART
 var y = d3.scale.linear()
     .rangeRound([height, 0]);
 
+// CREATE COLOR LEGEND FOR CHART
 var color = d3.scale.ordinal()
     .range(["#98abc5", "#8a89a6"]);
 
+
+// CREATE X-AXIS FOR CHART
 var xAxis = d3.svg.axis()
     .scale(x)
     .orient("bottom");
 
+// CREATE Y-AXIS FOR CHART
 var yAxis = d3.svg.axis()
     .scale(y)
-    .orient("left")
-    .tickFormat(d3.format(".2s"));
+    .orient("left");
+    // .tickFormat(d3.format(".2s"));
 
-var svg = d3.select("body").append("svg")
-    .attr("width", width + margin.left + margin.right)
-    .attr("height", height + margin.top + margin.bottom)
-  .append("g")
-    .attr("transform", "translate(" + margin.left + "," + margin.top + ")");
-console.log('load data plz');
+
+// LOAD DATA FOR CHART
 d3.csv("data/leading-deaths.csv", function(item){
+	// PARSE DATA PROPS TO VALUES EXPECTED
 	item.Value = +item.Value;
 	item.Ref_Date = +item.Ref_Date;
 	return item;
@@ -65,7 +81,9 @@ d3.csv("data/leading-deaths.csv", function(item){
 
   if (error) throw error;
 
+  // TURN DATA INTO FORMAT WE WANT
   data.forEach(function(item){
+  	// IF DATA IS NUMBER OF DEATH FOR MALES OR FEMALE, RECORD IT
   	if (item.UNIT === 'Number of deaths' && (
   		item.SEX === 'Males' || item.SEX === 'Females'
   		)) {
@@ -89,6 +107,7 @@ d3.csv("data/leading-deaths.csv", function(item){
   	}
   });
 
+  // STILL TURNING DATA INTO FORMAT WE WANT (TYPE -> year[])
   Object.keys(dataSet).forEach(function(deathKey){
   	var yearData = [];
   	Object.keys(dataSet[deathKey]).forEach(function(yearKey) {
@@ -97,68 +116,111 @@ d3.csv("data/leading-deaths.csv", function(item){
   	dataSet[deathKey] = yearData;
   });
 
-  console.log(dataSet);
+  d3.select("body")
+  	.append('select')
+  	.on("change",function(){
+  		updateData(this.value);
+  	})
+  	.selectAll("option").data(Object.keys(dataSet)).enter().append("option")
+  	.attr("value",function(d){return d;})
+  	.text(function(d){return d;});
 
-  var Accidents = dataSet['Alzheimer\'s disease'];
- color.domain(d3.keys(Accidents[0]).filter(function(key) { return key !== "year"; }));
+  	updateData('Total, all causes of death');
 
-  Accidents.forEach(function(d) {
-    var y0 = 0;
-    d.sexes = color.domain().map(function(name) { return {name: name, y0: y0, y1: y0 += +d[name]}; });
-    d.total = d.sexes[d.sexes.length - 1].y1;
-  });
+  	function updateData(currentDisease){
+  		// CREATE CHART
+  		d3.select('body').select('svg').remove();
+		var svg = d3.select("body").append("svg")
+		    .attr("width", width + margin.left + margin.right)
+		    .attr("height", height + margin.top + margin.bottom)
+		  .append("g")
+		    .attr("transform", "translate(" + margin.left + "," + margin.top + ")");
+				  		  // HERE IS WHERE WE CHOOSE WHICH DATA WE WANT TO DISPLAY
+		  var Accidents = dataSet[currentDisease];
 
-  Accidents.sort(function(a, b) { return b.total - a.total; });
+		  // THIS IS WHERE WE'RE SETTING THE KEYS FOR THE LEGEND (COLORS MAP TO COLORS ABOVE)
+		 color.domain(d3.keys(Accidents[0]).filter(function(key) { return key !== "year"; }));
 
-  x.domain(Accidents.map(function(d) { return d.year; }));
-  y.domain([0, d3.max(Accidents, function(d) { return d.total; })]);
+		 // WE'RE CREATING FORMATTED DATA FOR EACH DATA (y axis and total data)
+		  Accidents.forEach(function(d) {
+		    var y0 = 0;
+		    d.sexes = color.domain().map(function(name) { return {name: name, y0: y0, y1: y0 += +d[name]}; });
+		    d.total = d.sexes[d.sexes.length - 1].y1;
+		  });
 
-  svg.append("g")
-      .attr("class", "x axis")
-      .attr("transform", "translate(0," + height + ")")
-      .call(xAxis);
+		  // HOW DO WE WANT THE DATA SORTED (by year, total amount, etc)
+		  Accidents.sort(function(a, b) { return a.year - b.year; });
 
-  svg.append("g")
-      .attr("class", "y axis")
-      .call(yAxis)
-    .append("text")
-      .attr("transform", "rotate(-90)")
-      .attr("y", 6)
-      .attr("dy", ".71em")
-      .style("text-anchor", "end")
+		  // WHAT IS THE X AXIS BASED ON 
+		  x.domain(Accidents.map(function(d) { return d.year; }));
 
-  var year = svg.selectAll(".year")
-      .data(Accidents)
-    .enter().append("g")
-      .attr("class", "g")
-      .attr("transform", function(d) { return "translate(" + x(d.year) + ",0)"; });
+		  // WHAT IS THE Y AXIS BASED ON
+		  y.domain([0, d3.max(Accidents, function(d) { console.log(d.total); return d.total; })]);
 
-  year.selectAll("rect")
-      .data(function(d) { return d.sexes; })
-    .enter().append("rect")
-      .attr("width", x.rangeBand())
-      .attr("y", function(d) { return y(d.y1); })
-      .attr("height", function(d) { return y(d.y0) - y(d.y1); })
-      .style("fill", function(d) { return color(d.name); });
 
-  var legend = svg.selectAll(".legend")
-      .data(color.domain().slice().reverse())
-    .enter().append("g")
-      .attr("class", "legend")
-      .attr("transform", function(d, i) { return "translate(0," + i * 20 + ")"; });
+		  // THIS IS WHERE ALL THE ACTUAL SVG RECTANGLES AND STUFF IS MADE
 
-  legend.append("rect")
-      .attr("x", width - 18)
-      .attr("width", 18)
-      .attr("height", 18)
-      .style("fill", color);
+		  svg.append("text")
+		      .attr("class", "title")
+		      .attr("x", width/2)
+		      .attr("y", 0 - (margin.top / 2))
+		      .attr("text-anchor", "middle")
+		      .text(currentDisease);
 
-  legend.append("text")
-      .attr("x", width - 24)
-      .attr("y", 9)
-      .attr("dy", ".35em")
-      .style("text-anchor", "end")
-      .text(function(d) { return d; });
+		  svg.append("g")
+		      .attr("class", "x axis")
+		      .attr("transform", "translate(0," + height + ")")
+		      .call(xAxis);
+
+		  svg.append("g")
+		      .attr("class", "y axis")
+		      .call(yAxis)
+		    .append("text")
+		      .attr("transform", "rotate(-90)")
+		      .attr("y", 6)
+		      .attr("dy", ".71em")
+		      .style("text-anchor", "end")
+		      .text("Number of Deaths");
+
+		  var year = svg.selectAll(".year")
+		      .data(Accidents)
+		    .enter().append("g")
+		      .attr("class", "g")
+		      .attr("transform", function(d) { return "translate(" + x(d.year) + ",0)"; });
+
+		  year.selectAll("rect")
+		      .data(function(d) { return d.sexes; })
+		    .enter().append("rect")
+		    	.attr('class', 'deaths')
+		      .attr("width", x.rangeBand())
+		      .attr("y", function(d) { return y(d.y1); })
+		      .attr("height", function(d) { return y(d.y0) - y(d.y1); })
+		      .style("fill", function(d) { return color(d.name); })
+		      .append("svg:title")
+		          .text(function(d, i) { return d.name + " deaths: " + d.y1; });
+
+		  var legend = svg.selectAll(".legend")
+		      .data(color.domain().slice().reverse())
+		    .enter().append("g")
+		      .attr("class", "legend")
+		      .attr("transform", function(d, i) { return "translate(80," + i * 30 + ")"; });
+
+		  legend.append("rect")
+		      .attr("x", width - 18)
+		      .attr("width", 18)
+		      .attr("height", 18)
+		      .style("fill", color);
+
+		  legend.append("text")
+		      .attr("x", width - 24)
+		      .attr("y", 9)
+		      .attr("dy", ".35em")
+		      .style("text-anchor", "end")
+		      .text(function(d) { return d; });
+
+		  	}
+
+
 
 });
 </script>
